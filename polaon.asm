@@ -1,20 +1,25 @@
-	; RAM mapping:
+; The Path of Limbo: Age of Nomads
+;
+; Minato Studios (c) 2019
 
-	; globals    		: $0000 - $00FF
-	; stack      		: $0100 - $01FF
-	; OAM buffer 		: $0200 - $02FF
-	; sprites data  	: $0300 - $03FF (state)
-	; free usage  		: $0400 - $04FF (state)
-	; free usage  		: $0500 - $05FF (state)
-	; free usage  		: $0600 - $06FF (state)
-	; action stack  	: $0700 - $07FF
+
+; RAM mapping:
+
+; globals    		: $0000 - $00FF
+; stack      		: $0100 - $01FF
+; OAM buffer 		: $0200 - $02FF
+; sprites data  	: $0300 - $03FF (state)
+; free usage  		: $0400 - $04FF (state)
+; free usage  		: $0500 - $05FF (state)
+; free usage  		: $0600 - $06FF (state)
+; action stack  	: $0700 - $07FF
 
 ; ****************************************************
 ; 					iNES header
 ; ****************************************************
 
 	; INES header
-	.inesprg 1  ; 1 PRG ROM
+	.inesprg 2  ; 2 PRG ROM
 	.ineschr 2  ; 2 CHR ROM
 	.inesmir 1	; mirror
 	.inesmap 4	; MMC3
@@ -27,19 +32,11 @@ BOTTOM_BAR_BUF 	= $0410 ; 96 bytes
 ACTION_STACK_HI = $0700
 SPLASH_TEXT_BUF	= $0300 ; 1k bytes
 
-; ****************************************************
-; 					PRG 0 ($8000)
-; ****************************************************
-
-	.bank 0		; PRG ROM
+; [ *************************************** PRG 2 ($8000 - $9FFF) *************************************** ]
+	.bank 2
 	.org $8000
 
-
-; ****************************************************
-; 						RESET
-; ****************************************************
-
-Reset: 
+Main: 
 
 	sei                 ; disable irqs
   	cld                 ; disable decimal mode
@@ -77,6 +74,8 @@ Reset:
 	sta state
 	jsr ChangeState
 	
+	jsr ChangePrgBanks				; change Prg banks
+
 	jsr ExeInitHandler
 
 	lda #%00000110					; turn off background and sprites
@@ -85,7 +84,7 @@ Reset:
 	jsr HideAllSprites
 	jsr ReqSpriteDMA				; sprite dma requested
 
-	jsr ChangeBanks					; change banks
+	jsr ChangeChrBanks				; change chr banks
 
 	ldx sprPalette					; draw background
 	ldy sprPalette + 1
@@ -249,7 +248,26 @@ NMI:
 ; 				global functions
 ; ****************************************************
 
-ChangeBanks:
+ChangePrgBanks:
+
+	pha
+						; change prg banks
+
+	lda #%01000111		; set prg $A000 - $BFFF to bank [prgBank + 1]
+	sta $8000
+	lda prgBank
+	sta $8001
+
+	lda #%01000110		; set prg $C000 - $DFFF to bank [prgBank]
+	sta $8000
+	lda prgBank + 1
+	sta $8001
+
+	pla
+
+	rts
+
+ChangeChrBanks:
 
 	pha
 						; change chr bank
@@ -1244,7 +1262,7 @@ ChangeState:
 
 	jsr Dereference16		; yx <- state structure address
 	
-	; copy 20 bytes from $yx to bkgPalette
+	; copy 22 bytes from $yx to bkgPalette
 
  	stx ptrLo				; set pointer to state structure
   	sty ptrHi
@@ -1257,7 +1275,7 @@ ChangeState:
 	sta bkgPalette, x		; store byte
 	inx
 	iny
-	cpy #20
+	cpy #22
 	bne .next
 
 	pla						; restore y
@@ -1462,33 +1480,17 @@ ExeActionExt:
 
 	jmp [ptrLo]
 
-
-
 h_Null:
 	rts
 
-; ****************************************************
-; 					state structures
-; ****************************************************
 
-states:
-	.dw s0, s1, s2, s3, s4, s5, s6
+; [ *************************************** PRG 0 ($A000-$BFFF) ***************************************]
+	.bank 0
+	.org $A000
 
 ; ****************************************************
 ; 				state 0 (copyright)
 ; ****************************************************
-
-s0:
-	.dw bg_palettes000		; background palettes
-	.dw bg_palettes000		; sprite palettes
-	.dw SPLASH_TEXT_BUF		; nametable
-	.db 0, 2, 4, 5, 6, 7 	; char bank
-	.dw S0InitHandler		; init
-	.dw h_Null				; proc
-	.dw h_Null				; update	
-	.dw actions0			; actions
-
-actions0: .dw a_sleep, a_cs
 
 S0InitHandler:
 
@@ -1549,18 +1551,6 @@ S0InitHandler:
 ; ****************************************************
 ; 				state 1 (welcome screen)
 ; ****************************************************
-
-s1:
-	.dw bg_palettes000		; background palettes
-	.dw bg_palettes000		; sprite palettes
-	.dw SPLASH_TEXT_BUF		; nametable
-	.db 0, 2, 4, 5, 6, 7 	; char bank
-	.dw S1InitHandler		; init
-	.dw h_Null				; proc
-	.dw h_Null				; update	
-	.dw actions1			; actions
-
-actions1: .dw a_sleep, a_cs
 
 S1InitHandler:
 
@@ -1624,18 +1614,6 @@ S1InitHandler:
 ; ****************************************************
 ; 				state 2 (menu)
 ; ****************************************************
-
-s2:
-	.dw bg_palettes000		; background palettes
-	.dw bg_palettes000		; sprite palettes
-	.dw nametable000		; nametable
-	.db 0, 2, 4, 5, 6, 7 	; char bank
-	.dw S2InitHandler		; init
-	.dw h_Null				; proc
-	.dw h_Null				; update	
-	.dw actions2			; actions
-
-actions2: .dw a_sx, a_2_menu, a_cs
 
 S2InitHandler:
 
@@ -1762,23 +1740,11 @@ h_2_MenuUpdate:
 ; 				state 3 (password)
 ; ****************************************************
 
-s3:
+
 
 ; ****************************************************
 ; 				state 4 (opening monologue)
 ; ****************************************************
-
-s4:
-	.dw bg_palettes001		; background palettes
-	.dw bg_palettes001		; sprite palettes
-	.dw SPLASH_TEXT_BUF		; nametable
-	.db 8, 10, 12, 13, 14, 15 	; chr bank
-	.dw S4InitHandler		; init
-	.dw h_Null				; proc
-	.dw h_Null				; update	
-	.dw actions4			; actions
-
-actions4: .dw a_sleep, a_text, a_cs
 
 S4InitHandler:
 
@@ -1835,18 +1801,6 @@ S4InitHandler:
 ; ****************************************************
 ; 				state 5 (chapter I)
 ; ****************************************************
-
-s5:
-	.dw bg_palettes000		; background palettes
-	.dw bg_palettes000		; sprite palettes
-	.dw SPLASH_TEXT_BUF		; nametable
-	.db 0, 2, 4, 5, 6, 7 	; char bank
-	.dw S5InitHandler		; init
-	.dw h_Null				; proc
-	.dw h_Null				; update	
-	.dw actions5			; actions
-
-actions5: .dw a_sleep, a_cs
 
 S5InitHandler:
 
@@ -1907,18 +1861,6 @@ S5InitHandler:
 ; ****************************************************
 ; 				state 6 (open space)
 ; ****************************************************
-
-s6:
-	.dw bg_palettes001
-	.dw sp_palettes001
-	.dw nametable001
-	.db 8, 10, 12, 13, 14, 15 	; chr bank
-	.dw S6InitHandler			; init
-	.dw h_Null					; proc
-	.dw h_Null					; update
-	.dw actions6
-
-actions6: .dw a_6_openspace_i, a_text
 
 S6InitHandler:
 
@@ -2846,6 +2788,139 @@ text003:
 text004:
 	.incbin "text004.str"				; "is asks for a password"
 
+
+
+; [ *************************************** PRG 1 ($C000 - $DFFF) *************************************** ]
+	.bank 1
+	.org $C000
+
+; [ *************************************** PRG 3 ($E000 - $FFFF) *************************************** ]
+	.bank 3
+	.org $E000
+
+Reset:
+
+	lda #%01000110		; set prg $C000 - $DFFF to bank 1
+	sta $8000
+	lda #1
+	sta $8001
+
+	lda #%01000111		; set prg $A000 - $BFFF to bank 0
+	sta $8000
+	lda #0
+	sta $8001
+
+	jmp Main
+
+; ****************************************************
+; 				state structures
+; ****************************************************
+
+states:
+	.dw s0, s1, s2, s3, s4, s5, s6
+
+s0:
+	.dw bg_palettes000		; background palettes
+	.dw bg_palettes000		; sprite palettes
+	.dw SPLASH_TEXT_BUF		; nametable
+	.db 0, 2, 4, 5, 6, 7 	; char bank
+	.db 0, 1				; prg bank
+	.dw S0InitHandler		; init
+	.dw h_Null				; proc
+	.dw h_Null				; update	
+	.dw actions0			; actions
+
+actions0: .dw a_sleep, a_cs
+
+s1:
+	.dw bg_palettes000		; background palettes
+	.dw bg_palettes000		; sprite palettes
+	.dw SPLASH_TEXT_BUF		; nametable
+	.db 0, 2, 4, 5, 6, 7 	; char bank
+	.db 0, 1				; prg bank
+	.dw S1InitHandler		; init
+	.dw h_Null				; proc
+	.dw h_Null				; update	
+	.dw actions1			; actions
+
+actions1: .dw a_sleep, a_cs
+
+s2:
+	.dw bg_palettes000		; background palettes
+	.dw bg_palettes000		; sprite palettes
+	.dw nametable000		; nametable
+	.db 0, 2, 4, 5, 6, 7 	; char bank
+	.db 0, 1				; prg bank
+	.dw S2InitHandler		; init
+	.dw h_Null				; proc
+	.dw h_Null				; update	
+	.dw actions2			; actions
+
+actions2: .dw a_sx, a_2_menu, a_cs
+
+
+s3:
+
+s4:
+	.dw bg_palettes001			; background palettes
+	.dw bg_palettes001			; sprite palettes
+	.dw SPLASH_TEXT_BUF			; nametable
+	.db 8, 10, 12, 13, 14, 15 	; chr bank
+	.db 0, 1					; prg bank
+	.dw S4InitHandler			; init
+	.dw h_Null					; proc
+	.dw h_Null					; update	
+	.dw actions4				; actions
+
+actions4: .dw a_sleep, a_text, a_cs
+
+s5:
+	.dw bg_palettes000		; background palettes
+	.dw bg_palettes000		; sprite palettes
+	.dw SPLASH_TEXT_BUF		; nametable
+	.db 0, 2, 4, 5, 6, 7 	; char bank
+	.db 0, 1				; prg bank
+	.dw S5InitHandler		; init
+	.dw h_Null				; proc
+	.dw h_Null				; update	
+	.dw actions5			; actions
+
+actions5: .dw a_sleep, a_cs
+
+s6:
+	.dw bg_palettes001
+	.dw sp_palettes001
+	.dw nametable001
+	.db 8, 10, 12, 13, 14, 15 	; chr bank
+	.db 0, 1					; prg bank
+	.dw S6InitHandler			; init
+	.dw h_Null					; proc
+	.dw h_Null					; update
+	.dw actions6
+
+actions6: .dw a_6_openspace_i, a_text
+
+; ****************************************************
+; 				int vector
+; ****************************************************
+
+	.org $FFFA
+	.dw NMI    		; NMI
+	.dw Reset 		; reset
+	.dw 0			; IRQ
+
+
+; [ *************************************** CHR 4 ($0000-$1FFF) *************************************** ]
+	.bank 4
+	.org $0000
+	.incbin "background000.chr"
+	.incbin "sprites000.chr"
+; [ *************************************** CHR 5 ($0000-$1FFF) *************************************** ]
+	.incbin "background001.chr"
+	.incbin "sprites001.chr"
+
+
+
 ; ****************************************************
 ; 					global variables
 ; ****************************************************
@@ -2882,6 +2957,7 @@ bkgPalette		.rs 2		; current state
 sprPalette		.rs 2
 nametable		.rs 2
 chrBank			.rs 6
+prgBank			.rs 2
 initHandler 	.rs 2
 procHandler 	.rs 2
 updateHandler 	.rs 2
@@ -2892,24 +2968,3 @@ actInput 		.rs 2
 actProc 		.rs 2
 actUpdate 		.rs 2
 actExt			.rs 2
-
-; ****************************************************
-; 					int vector
-; ****************************************************
-
-	.bank 1   	; interrupt vector
-	.org $FFFA  ; start at $FFFA
-	.dw NMI    	; NMI
-	.dw Reset 	; reset
-	.dw 0		; IRQ
-
-; ****************************************************
-; 					CHR ROM
-; ****************************************************
-
-	.bank 2		; CHR ROM
-	.org $0000
-	.incbin "background000.chr"
-	.incbin "sprites000.chr"
-	.incbin "background001.chr"
-	.incbin "sprites001.chr"
