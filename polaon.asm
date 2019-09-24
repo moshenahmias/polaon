@@ -49,6 +49,14 @@ Main:
 	lda #0
 	sta ctrl0
 	sta ctrl0lh
+	sta ctrl0r
+	sta ctrl0l
+	sta ctrl0d
+	sta ctrl0u
+	sta ctrl0t
+	sta ctrl0e
+	sta ctrl0b
+	sta ctrl0a
 	sta nmi2001
 	sta nmiDMA
 	sta nmiBB
@@ -67,7 +75,7 @@ Main:
 	lda #%10001000		; init ppu (NMI enabled)
 	sta $2000
 
-	lda #0				; init state
+	lda #2				; init state
 
 .cs:
 
@@ -248,6 +256,39 @@ NMI:
 ; 				global functions
 ; ****************************************************
 
+; compare a chapter password to user input
+; arg (ptr) 	- password
+; arg (ptrII) 	- input
+; ret (a) 		- non-zero if equal
+PasswordCompare:
+
+	tya
+	pha
+
+	ldy #0
+.next:
+	lda [ptrLo], y
+	beq .eq
+	cmp [ptrLoII], y
+	bne .ne
+	iny
+	jmp .next
+
+.eq:
+
+	pla
+	tay
+	lda #1
+	rts
+
+.ne:
+
+	pla
+	tay
+	lda #0
+	rts
+
+; change prg banks
 ChangePrgBanks:
 
 	pha
@@ -267,6 +308,7 @@ ChangePrgBanks:
 
 	rts
 
+; change chr banks
 ChangeChrBanks:
 
 	pha
@@ -306,6 +348,8 @@ ChangeChrBanks:
 
 	rts
 
+; generate a pseudo-random value
+; ret (a) - random value
 Random:
 	tya
 	clc
@@ -1315,9 +1359,29 @@ ReadController0:
 	dex
 	bne .next
 
+					; low to high
 	eor ctrl0lh
 	and ctrl0
 	sta ctrl0lh
+
+					; history
+	lda ctrl0
+	lsr a
+	ror ctrl0r
+	lsr a
+	ror ctrl0l
+	lsr a
+	ror ctrl0d
+	lsr a
+	ror ctrl0u
+	lsr a
+	ror ctrl0t
+	lsr a
+	ror ctrl0e
+	lsr a
+	ror ctrl0b
+	lsr a
+	ror ctrl0a
 
 	pla			; restore index x
 	tax
@@ -1620,11 +1684,8 @@ S2InitHandler:
 	pha
 
 						; action init
-	lda #3				; cs to 3
+	lda #0				; set arrow to new game
 	jsr PhA
-	lda #0				; ca to default
-	jsr PhA
-			
 	lda #2				; ca to a_cs
 	jsr PhA
 
@@ -1632,6 +1693,290 @@ S2InitHandler:
 	sta softPpuScrollX			
 	lda #1				; ca to a_2_menu
 	jsr PhA
+
+	pla
+
+	rts
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; 2_pass
+; $0300 - $0307 : entered password
+; $0308 		: cursor
+
+a_2_pass: .dw h_2_PassInit, h_2_PassInput, h_2_PassProc, h_2_PassUpdate, 0
+
+h_2_PassInit:
+
+	pha
+
+	lda #$da		; init to AAAAAAAA
+	sta $0300
+	sta $0301
+	sta $0302
+	sta $0303
+	sta $0304
+	sta $0305
+	sta $0306
+	sta $0307
+	lda #0			; init cursor
+	sta $0308
+
+	lda #159		; cursor sprite
+	sta $0200
+	lda #1
+	sta $0201
+	sta $0202
+	lda #96
+	sta $0203
+
+					; char sprites
+	lda #151		; y
+	sta $0204
+	sta $0208
+	sta $020c
+	sta $0210
+	sta $0214
+	sta $0218
+	sta $021c
+	sta $0220
+	
+	lda #$da		; sprite
+	sta $0205
+	sta $0209
+	sta $020d
+	sta $0211
+	sta $0215
+	sta $0219
+	sta $021d
+	sta $0221
+
+	lda #03			; color
+	sta $0206
+	sta $020a
+	sta $020e
+	sta $0212
+	sta $0216
+	sta $021a
+	sta $021e
+	sta $0222
+
+	lda #96			; x
+	sta $0207
+	lda #104
+	sta $020b
+	lda #112
+	sta $020f
+	lda #120
+	sta $0213
+	lda #128
+	sta $0217
+	lda #136
+	sta $021b
+	lda #144
+	sta $021f
+	lda #152
+	sta $0223
+
+	pla
+
+	rts
+
+h_2_PassInput:
+
+	pha
+	txa
+	pha
+
+.up:
+
+	lda #%00001000	; test [up]
+	and ctrl0lh
+	bne .up_pressed
+
+	lda ctrl0u
+	cmp #$ff
+	bne .down
+
+.up_pressed:
+
+	; [up] pressed
+
+	ldx $0308
+	lda #$d0
+	cmp $0300, x	; "0"?	
+	beq .char_zero
+	dec $0300, x
+	jmp .done
+.char_zero:
+	lda #$f3
+	sta $0300, x	; "z"
+	jmp .done
+
+.down:
+
+	lda #%00000100	 ; test [down]
+	and ctrl0lh
+	bne .down_pressed
+
+	lda ctrl0d
+	cmp #$ff
+	bne .left
+
+.down_pressed:
+
+	; [down] pressed
+
+	ldx $0308
+	lda #$f3
+	cmp $0300, x	; "z"?	
+	beq .char_z
+	inc $0300, x
+	jmp .done
+.char_z:
+	lda #$d0
+	sta $0300, x	; "0"
+	jmp .done
+
+.left:
+
+	lda #%00000010	; test [left]
+	and ctrl0lh
+	beq .right
+
+	; [left] pressed
+
+	lda $0308
+	beq .cur_zero	; 0
+	dec $0308
+	jmp .done
+
+.cur_zero:
+
+	lda #7
+	sta $0308
+	jmp .done
+
+.right:
+
+	lda #%00000001	; test [right]
+	and ctrl0lh
+	beq .select
+
+	; [right] pressed
+
+	lda $0308
+	cmp #7
+	beq .cur_seven	; 0
+	inc $0308
+	jmp .done
+
+.cur_seven:
+
+	lda #0
+	sta $0308
+	jmp .done
+
+.select:
+
+	lda #%00100000	; test [select]
+	and ctrl0lh
+	beq .start
+
+	; [select] pressed
+
+	jmp .cancel
+
+.start:
+
+	lda #%00010000	; test [start]
+	and ctrl0lh
+	beq .done
+
+	; [start] pressed
+
+	lda $03
+	sta ptrHi
+	lda $00
+	sta ptrLo
+
+	lda #HIGH(pass001)		; test chapter 1
+	sta ptrHiII
+	lda #LOW(pass001)
+	sta ptrLoII
+	jsr PasswordCompare
+	beq .cancel
+	lda #5					; cs to 5
+	jmp .load
+
+	; todo other chapters
+
+.load:
+
+	jsr PhA
+	lda #0					; init to def action
+	jsr PhA
+	lda #2					; next action is a_cs
+	sta nextAction
+	jmp .done
+
+.cancel:
+
+	lda #$ff			; set arrow to password
+	jsr PhA
+	lda #2				; ca to a_cs
+	jsr PhA
+	lda retAction		; return to menu
+	sta nextAction
+
+	jsr HideAllSprites
+
+.done:
+
+	pla
+	tax
+	pla
+
+	rts
+
+h_2_PassProc:
+
+	pha
+
+	lda $0300		; chars
+	sta $0205
+	lda $0301
+	sta $0209
+	lda $0302
+	sta $020d
+	lda $0303
+	sta $0211
+	lda $0304
+	sta $0215
+	lda $0305
+	sta $0219
+	lda $0306
+	sta $021d
+	lda $0307
+	sta $0221
+
+	lda $0308		; cursor
+	asl a
+	asl a
+	asl a
+	clc
+	adc #96
+	sta $0203
+
+	pla
+
+	rts
+
+h_2_PassUpdate:
+
+	pha
+	lda #1
+	sta dmaReq
 
 	pla
 
@@ -1647,9 +1992,8 @@ h_2_MenuInit:
 
 	pha
 
-	lda #0				; selector
+	jsr	PoA				; selector
 	sta $0300
-	pla
 
 	lda #111			; arrow
 	sta $0200
@@ -1659,6 +2003,8 @@ h_2_MenuInit:
 	sta $0202
 	lda #80
 	sta $0203
+
+	pla
 
 	rts
 
@@ -1689,13 +2035,29 @@ h_2_MenuInput:
 	; [start] pressed
 
 	lda $0300
-	bne .done
+	bne .pass
 
-					; new game selected
+						; new game selected
+
+	lda #3				; cs to 3 (new game)
+	jsr PhA
+	lda #0				; ca to default
+	jsr PhA
 
 	lda retAction
 	sta nextAction
-	
+	jmp .done
+
+.pass:
+						; enter password
+
+
+	lda #1				; ca to a_2_menu
+	jsr PhA
+
+	lda #3
+	sta nextAction
+
 
 .done:
 
@@ -1713,26 +2075,25 @@ h_2_MenuProc:
 .pass:
 
 	lda #135
-	sta $0200
 	jmp .done
 
 .ng:
 
 	lda #111
-	sta $0200
-
-
 
 .done:
 
+	sta $0200
 	pla
 
 	rts
 
 h_2_MenuUpdate:
 
+	pha
 	lda #1
 	sta dmaReq
+	pla
 
 	rts
 
@@ -2788,7 +3149,8 @@ text003:
 text004:
 	.incbin "text004.str"				; "is asks for a password"
 
-
+pass001:
+	.db $ed, $de, $ec, $ed, $d1, $d2, $d3, $d4, $00 	; "test1234"
 
 ; [ *************************************** PRG 1 ($C000 - $DFFF) *************************************** ]
 	.bank 1
@@ -2856,7 +3218,7 @@ s2:
 	.dw h_Null				; update	
 	.dw actions2			; actions
 
-actions2: .dw a_sx, a_2_menu, a_cs
+actions2: .dw a_sx, a_2_menu, a_cs, a_2_pass
 
 
 s3:
@@ -2935,6 +3297,14 @@ tempII		.rs 1			; for temp things
 tempIII		.rs 1			; for temp things
 ctrl0		.rs 1			; controller 1 state
 ctrl0lh		.rs 1			; controller 1 state (low to high)
+ctrl0l		.rs 1			; controller 1 state (left history)
+ctrl0r		.rs 1			; controller 1 state (right history)
+ctrl0u		.rs 1			; controller 1 state (up history)
+ctrl0d		.rs 1			; controller 1 state (down history)
+ctrl0e		.rs 1			; controller 1 state (select history)
+ctrl0t		.rs 1			; controller 1 state (start history)
+ctrl0a		.rs 1			; controller 1 state (a history)
+ctrl0b		.rs 1			; controller 1 state (b history)
 state		.rs 1			; current state
 nmi2001 	.rs 1			; 2001 reg nmi flag
 nmiDMA 		.rs 1			; DMA req nmi flag
