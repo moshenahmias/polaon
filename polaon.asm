@@ -268,11 +268,11 @@ PasswordCompare:
 	ldy #0
 .next:
 	lda [ptrLo], y
-	beq .eq
 	cmp [ptrLoII], y
 	bne .ne
 	iny
-	jmp .next
+	cpy #8
+	bne .next
 
 .eq:
 
@@ -1792,11 +1792,17 @@ h_2_PassInput:
 
 	lda #%00001000	; test [up]
 	and ctrl0lh
-	bne .up_pressed
+	bne .clr_ctrl0u
 
 	lda ctrl0u
 	cmp #$ff
 	bne .down
+	jmp .up_pressed
+
+.clr_ctrl0u:
+
+	lda #0
+	sta ctrl0u
 
 .up_pressed:
 
@@ -1816,12 +1822,18 @@ h_2_PassInput:
 .down:
 
 	lda #%00000100	 ; test [down]
-	and ctrl0lh
-	bne .down_pressed
+	and ctrl0lh	
+	bne .clr_ctrl0d
 
 	lda ctrl0d
 	cmp #$ff
 	bne .left
+	jmp .down_pressed
+
+.clr_ctrl0d:
+
+	lda #0
+	sta ctrl0d
 
 .down_pressed:
 
@@ -1895,15 +1907,15 @@ h_2_PassInput:
 
 	; [start] pressed
 
-	lda $03
-	sta ptrHi
-	lda $00
-	sta ptrLo
+	lda #$03
+	sta ptrHiII
+	lda #$00
+	sta ptrLoII
 
 	lda #HIGH(pass001)		; test chapter 1
-	sta ptrHiII
+	sta ptrHi
 	lda #LOW(pass001)
-	sta ptrLoII
+	sta ptrLo
 	jsr PasswordCompare
 	beq .cancel
 	lda #5					; cs to 5
@@ -3149,9 +3161,6 @@ text003:
 text004:
 	.incbin "text004.str"				; "is asks for a password"
 
-pass001:
-	.db $ed, $de, $ec, $ed, $d1, $d2, $d3, $d4, $00 	; "test1234"
-
 ; [ *************************************** PRG 1 ($C000 - $DFFF) *************************************** ]
 	.bank 1
 	.org $C000
@@ -3220,7 +3229,6 @@ s2:
 
 actions2: .dw a_sx, a_2_menu, a_cs, a_2_pass
 
-
 s3:
 
 s4:
@@ -3261,6 +3269,14 @@ s6:
 	.dw actions6
 
 actions6: .dw a_6_openspace_i, a_text
+
+; ****************************************************
+; 				passwords
+; ****************************************************
+
+pass001:
+	.db $ed, $de, $ec, $ed, $d1, $d2, $d3, $d4, $00 	; "test1234"
+
 
 ; ****************************************************
 ; 				int vector
